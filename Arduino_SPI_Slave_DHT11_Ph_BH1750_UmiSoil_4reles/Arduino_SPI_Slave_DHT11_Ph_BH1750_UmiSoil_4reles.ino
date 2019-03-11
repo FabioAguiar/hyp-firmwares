@@ -113,7 +113,7 @@ void loop() {
           #endif
         }else{
           #ifdef DEBUG
-            Serial.print("grow/sensor/humidade/01/");
+            Serial.print("grow/sensor/umidade/01/");
             Serial.println(humidadeValor);
           #endif
         }    
