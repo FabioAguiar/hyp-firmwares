@@ -2,7 +2,7 @@ int rodaA1 = 5;
 int rodaA2 = 6;
 int rodaB1 = 10;
 int rodaB2 = 11;
-int velocidade = 255;
+int velocidade = 150;
 
 
 void setup() {
@@ -29,11 +29,8 @@ void loop() {
               velocidade = map(velocidade, 0, 9, 0, 255);
               Serial.print("Velocidade: ");
               Serial.println(velocidade);
-        }
-        
+        } 
   }
-
-  
 
   switch(comando){
     case 'S':
@@ -54,6 +51,7 @@ void loop() {
     default:
       break;
   }
+  
 }
 
 void frente(){
@@ -61,37 +59,32 @@ void frente(){
   analogWrite(rodaA2, LOW);
   analogWrite(rodaB1, velocidade);
   analogWrite(rodaB2, LOW);
-  
-//  digitalWrite(rodaA1, HIGH);
-//  digitalWrite(rodaA2, LOW);
-//  digitalWrite(rodaB1, HIGH);
-//  digitalWrite(rodaB2, LOW);
 }
 
 void tras(){
-  digitalWrite(rodaA1, LOW);
-  digitalWrite(rodaA2, HIGH);
-  digitalWrite(rodaB1, LOW);
-  digitalWrite(rodaB2, HIGH);
+  analogWrite(rodaA1, LOW);
+  analogWrite(rodaA2, velocidade);
+  analogWrite(rodaB1, LOW);
+  analogWrite(rodaB2, velocidade);
 }
 
 void parar(){
-  digitalWrite(rodaA1, LOW);
-  digitalWrite(rodaA2, LOW);
-  digitalWrite(rodaB1, LOW);
-  digitalWrite(rodaB2, LOW);
+  analogWrite(rodaA1, LOW);
+  analogWrite(rodaA2, LOW);
+  analogWrite(rodaB1, LOW);
+  analogWrite(rodaB2, LOW);
 }
 
 void girarEsquerda(){
-  digitalWrite(rodaA1, LOW);
-  digitalWrite(rodaA2, HIGH);
-  digitalWrite(rodaB1, HIGH);
-  digitalWrite(rodaB2, LOW);
+  analogWrite(rodaA1, LOW);
+  analogWrite(rodaA2, velocidade);
+  analogWrite(rodaB1, velocidade);
+  analogWrite(rodaB2, LOW);
 }
 
 void girarDireita(){
-  digitalWrite(rodaA1, HIGH);
-  digitalWrite(rodaA2, LOW);
-  digitalWrite(rodaB1, LOW);
-  digitalWrite(rodaB2, HIGH);
+  analogWrite(rodaA1, velocidade);
+  analogWrite(rodaA2, LOW);
+  analogWrite(rodaB1, LOW);
+  analogWrite(rodaB2, velocidade);
 }
