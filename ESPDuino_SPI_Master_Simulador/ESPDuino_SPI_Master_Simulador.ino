@@ -1,12 +1,11 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include<SPI.h>
+#include <StringSplitter.h>
+#include <SPI.h>
 
 #define DEBUG
 WiFiClient espClient;
 PubSubClient client(espClient);
-char buff[100];
-int tempo = 2000;
 
 struct wifi{
   char* ssid;
@@ -22,16 +21,7 @@ struct broker_mqtt{
 
 struct global_helper{
   int dispatchInterval;
-  char* topicBase;
   int lastMQTTSend;
-};
-
-struct mqtt_publish{
-  char* sensor1;
-  char* sensor2;
-  char* sensor3;
-  char* sensor4;
-  char* sensor5;
 };
 
 struct mqtt_subscriber{
@@ -45,7 +35,6 @@ struct mqtt_subscriber{
 struct wifi wifi_information;
 struct broker_mqtt server;
 struct global_helper helper;
-struct mqtt_publish pub;
 struct mqtt_subscriber subs;
 
 void setInitWifi(){
@@ -66,79 +55,53 @@ void setServerBroker(char* mqttServer, char* mqttUser, char* mqttPassword, uint1
 }
 
 void setInitGlobalHelper(){
-  helper = (global_helper) {2000, "grow/", 0};
+  helper = (global_helper) {2000, 0};
 }
 
-void setGlobalHelper(int dispatchInterval, char* topicBase, int lastMQTTSend){
-  helper = (global_helper) {dispatchInterval, topicBase, lastMQTTSend};
+void setGlobalHelper(int dispatchInterval, int lastMQTTSend){
+  helper = (global_helper) {dispatchInterval, lastMQTTSend};
 }
 
 void setInitMQTTSubscriber(){
-  subs = (mqtt_subscriber) {"grow/A1", "grow/A2", "grow/A3", "grow/A4"};
+  subs = (mqtt_subscriber) {"grow/a1/4", "grow/a2/5", "grow/a3/6", "grow/a4/7"};
 }
 
 void setMQTTSubscriber(char* actuator1, char* actuator2, char* actuator3, char* actuator4){
   subs = (mqtt_subscriber) {actuator1, actuator2, actuator3, actuator4};
 }
 
-void setInitMQTTPublish(){
-  pub = (mqtt_publish) {"grow/sensor/umidsoil/01/", "grow/sensor/humidade/01/", "grow/sensor/temperatura/01/", "grow/sensor/lumen/01/", "grow/sensor/pH/01/"};
-}
-
-void setMQTTPublish(char* sensor1, char* sensor2, char* sensor3, char* sensor4){
-  pub = (mqtt_publish) {sensor1, sensor2, sensor3, sensor4};
-}
-
 void callback(char* topic, byte* payload, unsigned int length) {
- 
-  //armazena msg recebida em uma sring
-  payload[length] = '\0';
-  String strMSG = String((char*)payload);
-  String strTopic = topic;
-  String subsActuator1(subs.actuator1);
-  String subsActuator2(subs.actuator2);
-  String subsActuator3(subs.actuator3);
-  String subsActuator4(subs.actuator4);
-  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT); 
 
+  payload[length] = '\0';
+  String topicMsg = String(topic) + '/' + String((char*)payload) + '\r';
+
+  char c;
+  digitalWrite(SS, LOW);
+  for (const char * p = topicMsg.c_str() ; c = *p; p++){
+    SPI.transfer (c);
+    Serial.print(c);
+  }
+  digitalWrite(SS, HIGH);
+  delay(2000);
+
+  if(int((char*)payload)){
+    digitalWrite(LED_BUILTIN, LOW);
+  }else{
+    digitalWrite(LED_BUILTIN, HIGH);    
+  }
+  
   
   #ifdef DEBUG
-  Serial.print("Mensagem chegou do tópico: ");
-  Serial.println(topic);
-  Serial.print("Mensagem:");
-  Serial.print(strMSG);
-  Serial.println();
-  Serial.println("-----------------------");
+    Serial.print("Mensagem chegou do tópico: ");
+    Serial.println(topic);
+    Serial.print("Mensagem:");
+    Serial.print(String((char*)payload));
+    Serial.println();
+    Serial.println("-----------------------");
   #endif
 
-
-  if(strTopic == subsActuator1){
-    if(strMSG == "1"){
-      digitalWrite(LED_BUILTIN, LOW);
-    }else{
-      digitalWrite(LED_BUILTIN, HIGH);
-    }
-  }else if(strTopic == subsActuator2){
-    if(strMSG == "1"){
-    // ligar atuador 2
-    }else{
-    // desligar atuador 2
-    }
-  }else if(strTopic == subsActuator3){
-    if(strMSG == "1"){
-    // ligar atuador 3
-    }else{
-    // desligar atuador 3
-    }
-  }else if(strTopic == subsActuator4){
-    if(strMSG == "1"){
-    // ligar atuador 4
-    }else{
-    // desligar atuador 4
-    }
-  }
-
-  delay(tempo);
+  delay(helper.dispatchInterval);
 }
 
 void initWifi(){
@@ -216,7 +179,6 @@ void initConfig(){
   setInitWifi();
   setInitServerBroker();
   initWifi();
-  setInitMQTTPublish();
   setInitMQTTSubscriber();
   client.subscribe(subs.actuator1); 
   client.subscribe(subs.actuator2);
@@ -225,42 +187,45 @@ void initConfig(){
 }
 
 void setup() {
-  Serial.begin(9600);
-  SPI.begin();
+  Serial.begin(115200);
+  digitalWrite(SS, HIGH); // Desabilita Slave Select
+  SPI.begin ();
+  SPI.setClockDivider(SPI_CLOCK_DIV8);// Divide clock por 8
+  
   initConfig();
 }
 
-void sendHumidSoil(){
-  float umidSoil = random(0, 1024);
-  client.publish(pub.sensor1, String(umidSoil).c_str(), true);
+void sendMQTT(char msgMQTT[]){
+  StringSplitter *splitter = new StringSplitter(msgMQTT, '/', 5);
+  String topic = splitter->getItemAtIndex(0) + '/' + splitter->getItemAtIndex(1) + '/' + splitter->getItemAtIndex(2) + '/' + splitter->getItemAtIndex(3) + '/';
+  float msg = splitter->getItemAtIndex(4).toFloat();  
+  
+  if(splitter->getItemAtIndex(2).equals("umidsoil")){
+      msg = 1023 - msg;
+  }
+
+  client.publish(String(topic).c_str(), String(msg).c_str(), true);
 }
 
-void sendHumid(){
-  float humid = random(15, 20);
-  client.publish(pub.sensor2, String(humid).c_str(), true);
-}
-
-void sendTemp(){
-  float temp = random(25, 31);
-  client.publish(pub.sensor3, String(temp).c_str(), true);
-}
-
-void sendLumen(){
-  float lumen = random(0, 65000);
-  client.publish(pub.sensor4, String(lumen).c_str(), true);
-}
-
-void sendpH(){
-  float pH = random(5, 7);
-  client.publish(pub.sensor5, String(pH).c_str(), true);
-}
-
-void sendMQTT(){
-  sendHumidSoil();
-  sendHumid();
-  sendTemp();
-  sendLumen();
-  sendpH();
+void readSerialPort(){
+    char s[100];
+    char c;
+    int cont = 0;
+    //Leitura de bytes (caracteres ) porta da porta RX
+    Serial.flush();
+    while (Serial.available() > 0)  {
+      c = Serial.read();
+      s[cont] = c; //concatena os caracteres em um array de char
+      if(s[cont] == '\n'){ // Quando encontrar o caracter \n, adiciona o caracter \0 ao final do array
+        s[cont] = '\0';
+        break;
+      }
+      cont++;
+      delay(3);
+    }
+    //Serial.println(s);//Impressão do array de char
+    Serial.flush();
+    sendMQTT(s);
 }
 
 void loop() {
@@ -269,9 +234,9 @@ void loop() {
   }
 
   if ((millis() - helper.lastMQTTSend) > helper.dispatchInterval){
-    sendMQTT();
+    readSerialPort();
     helper.lastMQTTSend = millis();
   }
 
-  client.loop();  
+   client.loop();
 }
