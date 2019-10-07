@@ -1,12 +1,20 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include<SPI.h>
+#include "DHTesp.h"
 
+//#include<SPI.h>
+DHTesp dht;
 #define DEBUG
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 char buff[100];
 int tempo = 2000;
+
+float humidadeValor;
+float temeperaturaValor;
+uint16_t lumenValor;
+int dhtPin = 0;
 
 struct wifi{
   char* ssid;
@@ -30,8 +38,6 @@ struct mqtt_publish{
   char* sensor1;
   char* sensor2;
   char* sensor3;
-  char* sensor4;
-  char* sensor5;
 };
 
 struct mqtt_subscriber{
@@ -82,11 +88,11 @@ void setMQTTSubscriber(char* actuator1, char* actuator2, char* actuator3, char* 
 }
 
 void setInitMQTTPublish(){
-  pub = (mqtt_publish) {"grow/sensor/umidsoil/01/", "grow/sensor/humidade/01/", "grow/sensor/temperatura/01/", "grow/sensor/lumen/01/", "grow/sensor/pH/01/"};
+  pub = (mqtt_publish) {"grow/01/sensor/umidade/01/", "grow/01/sensor/temperatura/01/", "grow/01/sensor/ldr/01/"};
 }
 
 void setMQTTPublish(char* sensor1, char* sensor2, char* sensor3, char* sensor4){
-  pub = (mqtt_publish) {sensor1, sensor2, sensor3, sensor4};
+  pub = (mqtt_publish) {sensor1, sensor2, sensor3};
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -226,41 +232,57 @@ void initConfig(){
 
 void setup() {
   Serial.begin(9600);
-  SPI.begin();
+  dht.setup(dhtPin, DHTesp::DHT22);
+  //SPI.begin();
   initConfig();
 }
 
-void sendHumidSoil(){
-  float umidSoil = random(0, 1024);
-  client.publish(pub.sensor1, String(umidSoil).c_str(), true);
-}
-
 void sendHumid(){
-  float humid = random(15, 20);
-  client.publish(pub.sensor2, String(humid).c_str(), true);
+  //float humid = random(15, 20);
+  humidadeValor = dht.getHumidity();
+  if (isnan(humidadeValor)) {
+    Serial.println("Falha ao ler dados do sensor DHT !!!");    
+    return;
+  }
+  client.publish(pub.sensor1, String(humidadeValor).c_str(), true);
 }
 
 void sendTemp(){
-  float temp = random(25, 31);
-  client.publish(pub.sensor3, String(temp).c_str(), true);
+  //float temp = random(25, 31);
+  temeperaturaValor = dht.getTemperature();
+  Serial.println(temeperaturaValor);
+  if (isnan(temeperaturaValor)) {
+    Serial.println("Falha ao ler dados do sensor DHT !!!");    
+    return;
+  }
+  client.publish(pub.sensor2, String(temeperaturaValor).c_str(), true);
 }
 
-void sendLumen(){
-  float lumen = random(0, 65000);
-  client.publish(pub.sensor4, String(lumen).c_str(), true);
+void sendLuz(){
+  //float lumen = random(0, 100);
+  float lumen = analogRead(A0);
+  client.publish(pub.sensor3, String(lumen).c_str(), true);
 }
 
+void sendHumidSolo(){
+  //float umidSoil = random(0, 1024);
+  //client.publish(pub.sensor1, String(umidSoil).c_str(), true);
+}
 void sendpH(){
-  float pH = random(5, 7);
-  client.publish(pub.sensor5, String(pH).c_str(), true);
+  //float pH = random(5, 7);
+  //client.publish(pub.sensor5, String(pH).c_str(), true);
 }
 
 void sendMQTT(){
-  sendHumidSoil();
+  delay(dht.getMinimumSamplingPeriod());
   sendHumid();
+  delay(2000);
   sendTemp();
-  sendLumen();
-  sendpH();
+  delay(2000);  
+  sendLuz(); 
+  delay(2000);   
+  //sendHumidSolo();
+  //sendpH();
 }
 
 void loop() {
