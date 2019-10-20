@@ -55,8 +55,8 @@ struct mqtt_publish pub;
 struct mqtt_subscriber subs;
 
 void setInitWifi(){
-  //wifi_information = (wifi) {"SUPERNET_FABYUU", "luci6666"};
-  wifi_information = (wifi) {"Ap-F12", "08774576"};
+  wifi_information = (wifi) {"SUPERNET_FABYUU", "luci6666"};
+  //wifi_information = (wifi) {"Ap-F12", "08774576"};
 }
 
 void setWifi(char* ssid, char* password){
@@ -105,8 +105,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   String subsActuator2(subs.actuator2);
   String subsActuator3(subs.actuator3);
   String subsActuator4(subs.actuator4);
-  pinMode(LED_BUILTIN, OUTPUT);
-
+  pinMode(D6, OUTPUT); //led Verde
+  pinMode(D5, OUTPUT); //led Azul 
+  digitalWrite(D6, LOW);
+  digitalWrite(D5, HIGH);
   
   #ifdef DEBUG
   Serial.print("Mensagem chegou do tópico: ");
@@ -120,9 +122,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if(strTopic == subsActuator1){
     if(strMSG == "1"){
-      digitalWrite(LED_BUILTIN, LOW);
+      digitalWrite(D6, HIGH);
+      digitalWrite(D5, LOW);
     }else{
-      digitalWrite(LED_BUILTIN, HIGH);
+      digitalWrite(D6, LOW);
+      digitalWrite(D5, HIGH);
     }
   }else if(strTopic == subsActuator2){
     if(strMSG == "1"){
@@ -234,7 +238,11 @@ void setup() {
   Serial.begin(9600);
   dht.setup(dhtPin, DHTesp::DHT22);
   //SPI.begin();
-  initConfig();
+  pinMode(D6, OUTPUT); //led Verde
+  pinMode(D5, OUTPUT); //led Azul 
+  digitalWrite(D6, LOW);
+  digitalWrite(D5, HIGH);  
+  initConfig();  
 }
 
 void sendHumid(){
