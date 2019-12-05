@@ -51,9 +51,8 @@ struct mqtt_publish pub;
 struct mqtt_subscriber subs;
 
 void setInitWifi(){
-  wifi_information = (wifi) {"DEN_BIOMASSA", "BIO_DEN_2014+"};  
   //wifi_information = (wifi) {"SUPERNET_FABYUU", "luci6666"};
-  //wifi_information = (wifi) {"Ap-F12", "08774576"};
+  wifi_information = (wifi) {"Ap-F12", "08774576"};
 }
 
 void setWifi(char* ssid, char* password){
