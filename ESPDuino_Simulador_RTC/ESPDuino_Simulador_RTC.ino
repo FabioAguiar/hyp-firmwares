@@ -1,13 +1,16 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include<SPI.h>
+#include <Wire.h>
+#include <RTClib.h>
 
 #define DEBUG
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+RTC_DS1307 RTC;
 
 int tempo = 2000;
+char daysOfTheWeek[7][12] = {"Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"};
 
 struct wifi{
   char* ssid;
@@ -181,6 +184,20 @@ void initWifi(){
   }  
 }
 
+
+void initWire(){
+    Wire.begin();  
+}
+
+void initRTC(){
+    RTC.begin();
+  if (! RTC.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    // following line sets the RTC to the date & time this sketch was compiled
+    // RTC.adjust(DateTime(__DATE__, __TIME__));
+  }  
+}
+
 void reconect() {
   //Enquanto estiver desconectado
   while (!client.connected()) {
@@ -224,15 +241,13 @@ void initConfig(){
   client.subscribe(subs.actuator2);
   client.subscribe(subs.actuator3);
   client.subscribe(subs.actuator4);
+  initWire();
+  initRTC();
 }
 
 void setup() {
   Serial.begin(9600);
-  SPI.begin();
   initConfig();
-
-
-  
 }
 
 void sendHumidSoil(){
@@ -268,7 +283,37 @@ void sendMQTT(){
   sendpH();
 }
 
+void dateTimeNow(){
+    DateTime now = RTC.now(); 
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(" (");
+    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
+    Serial.print(") ");    
+    Serial.print(' ');
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println(); 
+
+    Serial.write(" since midnight 1/1/1970 = ");
+    Serial.print(now.unixtime());
+    Serial.print("s = ");
+    Serial.print(now.unixtime() / 86400L);
+    Serial.println("d");
+    
+    delay(1000);  
+}
+
 void loop() {
+
+  dateTimeNow();
+  
   if (!client.connected()) {
     reconect();
   }

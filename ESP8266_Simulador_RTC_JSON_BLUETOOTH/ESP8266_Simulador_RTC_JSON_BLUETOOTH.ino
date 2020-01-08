@@ -1,13 +1,22 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include<SPI.h>
+#include <Wire.h>
+#include <RTClib.h>
+#include <StringSplitter.h>
+#include <ArduinoJson.h>
 
 #define DEBUG
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+RTC_DS1307 RTC;
 
 int tempo = 2000;
+char daysOfTheWeek[7][12] = {"Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"};
+char buff [512];
+bool btPermission = true;
+
+StringSplitter *splitter;
 
 struct wifi{
   char* ssid;
@@ -43,11 +52,24 @@ struct mqtt_subscriber{
   //char* dateMillisTime;
 };
 
+struct split_topic{
+  StringSplitter *splitTopicSensor1;
+  StringSplitter *splitTopicSensor2;
+  StringSplitter *splitTopicSensor3;
+  StringSplitter *splitTopicSensor4;
+  StringSplitter *splitTopicSensor5;
+  StringSplitter *splitTopicActuator1;
+  StringSplitter *splitTopicActuator2;
+  StringSplitter *splitTopicActuator3;
+  StringSplitter *splitTopicActuator4;    
+};
+
 struct wifi wifi_information;
 struct broker_mqtt server;
 struct global_helper helper;
 struct mqtt_publish pub;
 struct mqtt_subscriber subs;
+struct split_topic st;
 
 void setInitWifi(){
   //wifi_information = (wifi) {"DEN_BIOMASSA", "BIO_DEN_2014+"};  
@@ -77,6 +99,10 @@ void setGlobalHelper(int dispatchInterval, char* topicBase, int lastMQTTSend){
 
 void setInitMQTTSubscriber(){
   subs = (mqtt_subscriber) {"grow/A1", "grow/A2", "grow/A3", "grow/A4"};
+  st.splitTopicActuator1 = new StringSplitter(subs.actuator1, '/', 1);
+  st.splitTopicActuator2 = new StringSplitter(subs.actuator2, '/', 1);
+  st.splitTopicActuator3 = new StringSplitter(subs.actuator3, '/', 1);
+  st.splitTopicActuator4 = new StringSplitter(subs.actuator4, '/', 1);
 }
 
 void setMQTTSubscriber(char* actuator1, char* actuator2, char* actuator3, char* actuator4){
@@ -84,7 +110,12 @@ void setMQTTSubscriber(char* actuator1, char* actuator2, char* actuator3, char* 
 }
 
 void setInitMQTTPublish(){
-  pub = (mqtt_publish) {"grow/sensor/umidsoil/01/", "grow/sensor/humidade/01/", "grow/sensor/temperatura/01/", "grow/sensor/lumen/01/", "grow/sensor/pH/01/"};
+  pub = (mqtt_publish) {"grow/sensor/d1/s1/FC28", "grow/sensor/d1/s2/DHT11", "grow/sensor/d1/s3/DHT11", "grow/sensor/d1/s4/BH1750", "grow/sensor/d1/s5/pH"};
+  st.splitTopicSensor1 = new StringSplitter(pub.sensor1, '/', 5);
+  st.splitTopicSensor2 = new StringSplitter(pub.sensor2, '/', 5);
+  st.splitTopicSensor3 = new StringSplitter(pub.sensor3, '/', 5);
+  st.splitTopicSensor4 = new StringSplitter(pub.sensor4, '/', 5);
+  st.splitTopicSensor5 = new StringSplitter(pub.sensor5, '/', 5);
 }
 
 void setMQTTPublish(char* sensor1, char* sensor2, char* sensor3, char* sensor4){
@@ -181,6 +212,19 @@ void initWifi(){
   }  
 }
 
+
+void initWire(){
+    Wire.begin();  
+}
+
+void initRTC(){
+    RTC.begin();
+  if (! RTC.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    //RTC.adjust(DateTime(2020, 1, 7, 14, 46, 0));
+  }  
+}
+
 void reconect() {
   //Enquanto estiver desconectado
   while (!client.connected()) {
@@ -224,51 +268,139 @@ void initConfig(){
   client.subscribe(subs.actuator2);
   client.subscribe(subs.actuator3);
   client.subscribe(subs.actuator4);
+  initWire();
+  initRTC();
 }
 
 void setup() {
   Serial.begin(9600);
-  SPI.begin();
   initConfig();
-
-
-  
 }
 
-void sendHumidSoil(){
-  float umidSoil = random(0, 1024);
-  client.publish(pub.sensor1, String(umidSoil).c_str(), true);
+String dateTimeNow(){
+    DateTime now = RTC.now(); 
+    String dtn;
+    dtn += now.year();
+    dtn += '-';
+    dtn += now.month();
+    dtn += '-';
+    dtn += now.day();
+    dtn += ' ';
+    dtn +=now.hour();
+    dtn += ':';
+    dtn +=now.minute();
+    dtn += ':';
+    dtn +=now.second();
+    return dtn;
 }
 
-void sendHumid(){
+void serialPrintJson(DynamicJsonDocument doc, bool permission){
+  if(permission){
+    serializeJson(doc, Serial);
+    Serial.println("");    
+  }
+}
+
+DynamicJsonDocument docJSON(StringSplitter* topicSensor){
+  DynamicJsonDocument doc(1024);
+  doc["s_id"] = topicSensor->getItemAtIndex(3);
+  doc["sensor"] = topicSensor->getItemAtIndex(4);
+  doc["d_id"] = topicSensor->getItemAtIndex(2);
+  doc["dateTime"] = dateTimeNow();
+
+  return doc;
+}
+
+void sendHumidSoil(DynamicJsonDocument doc, char* topic){
+  float humidSoil = random(0, 1024);
+  doc["payload"] = humidSoil;
+  serialPrintJson(doc, btPermission);
+  serializeJson(doc, buff);
+  client.publish(topic, buff, true);
+  //client.publish(topic, String(humidSoil).c_str(), true);
+}
+
+void sendHumid(DynamicJsonDocument doc, char* topic){
   float humid = random(15, 20);
-  client.publish(pub.sensor2, String(humid).c_str(), true);
+  doc["payload"] = humid;
+  serialPrintJson(doc, btPermission);
+  serializeJson(doc, buff);
+  client.publish(topic, buff, true);  
+  //client.publish(pub.sensor2, String(humid).c_str(), true);
 }
 
-void sendTemp(){
+void sendTemp(DynamicJsonDocument doc, char* topic){
   float temp = random(25, 31);
-  client.publish(pub.sensor3, String(temp).c_str(), true);
+  doc["payload"] = temp;
+  serialPrintJson(doc, btPermission);
+  serializeJson(doc, buff);
+  client.publish(topic, buff, true);  
+  //client.publish(pub.sensor3, String(temp).c_str(), true);
 }
 
-void sendLumen(){
+void sendLumen(DynamicJsonDocument doc, char* topic){
   float lumen = random(0, 65000);
-  client.publish(pub.sensor4, String(lumen).c_str(), true);
+  doc["payload"] = lumen;
+  serialPrintJson(doc, btPermission);
+  serializeJson(doc, buff);
+  client.publish(topic, buff, true); 
+  //client.publish(pub.sensor4, String(lumen).c_str(), true);
 }
 
-void sendpH(){
+void sendpH(DynamicJsonDocument doc, char* topic){
   float pH = random(5, 7);
-  client.publish(pub.sensor5, String(pH).c_str(), true);
+  doc["payload"] = pH;  
+  serialPrintJson(doc, btPermission);
+  serializeJson(doc, buff);
+  client.publish(topic, buff, true); 
+  //client.publish(pub.sensor5, String(pH).c_str(), true);
+}
+
+void sendSensor1(StringSplitter* topicSplit){
+  sendHumidSoil(docJSON(topicSplit), pub.sensor1);
+}
+
+void sendSensor2(StringSplitter* topicSplit){
+  sendHumid(docJSON(topicSplit), pub.sensor2);
+}
+
+void sendSensor3(StringSplitter* topicSplit){
+  sendTemp(docJSON(topicSplit), pub.sensor3);
+}
+
+void sendSensor4(StringSplitter* topicSplit){
+  sendLumen(docJSON(topicSplit), pub.sensor4);
+}
+
+void sendSensor5(StringSplitter* topicSplit){
+  sendpH(docJSON(topicSplit), pub.sensor5);
 }
 
 void sendMQTT(){
-  sendHumidSoil();
-  sendHumid();
-  sendTemp();
-  sendLumen();
-  sendpH();
+  sendSensor1(st.splitTopicSensor1);
+  sendSensor2(st.splitTopicSensor2);
+  sendSensor3(st.splitTopicSensor3);
+  sendSensor4(st.splitTopicSensor4);
+  sendSensor5(st.splitTopicSensor5);
 }
 
+void btRead(){
+  if (Serial.available()){
+    char data_received; 
+    data_received = Serial.read();
+    if (data_received == '1'){
+      btPermission = true;
+    }else if (data_received == '0'){
+      btPermission = false;
+    }
+  }  
+}
+
+
 void loop() {
+
+  btRead();
+  
   if (!client.connected()) {
     reconect();
   }
